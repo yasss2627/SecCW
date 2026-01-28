@@ -10,6 +10,7 @@ Text to CW for transmit in AM and FM
 
 import sys
 import numpy
+import os
 
 def make_am_samples(amplitude, length_units, frequency=300.0):
     """
@@ -118,6 +119,7 @@ def write_toCS8(IQ, file):
     output_int[0::2] = numpy.round(IQ.real)
     output_int[1::2] = numpy.round(IQ.imag)
     output_int.tofile(file)
+    print(f"Fichier .cs8 écrit ici : {os.path.abspath(file)}")
 
 
 if __name__ == "__main__":
