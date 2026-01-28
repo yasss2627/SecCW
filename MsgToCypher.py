@@ -1,87 +1,71 @@
 #!/usr/bin/env python3
-
 """
-ChaCha20-Poly1305 script (Post-Quantum safe - symmetric)
+MsgToCypher.py - Post-quantum minimal ciphertext (OTP-like SHA-3)
 
-* Generate key and nonce
-* Encrypt
+* Generate key/seed
+* Encrypt via XOR stream
 * Decrypt
 """
 
-import secrets
 import sys
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+import secrets
+import hashlib
 
+# Générer une clé/seed pour le flux pseudo-aléatoire
+def generer_cle(taille=32):
+    return secrets.token_bytes(taille)
 
-# Générer une clé ChaCha20-Poly1305 (256 bits)
-def generer_cle():
-    return ChaCha20Poly1305.generate_key()
+# Générer un flux pseudo-aléatoire à partir de la clé/seed
+def flux_pseudo_aleatoire(cle, taille_message):
+    # On utilise SHA3-256 en mode counter
+    counter = 0
+    flux = b""
+    while len(flux) < taille_message:
+        h = hashlib.sha3_256(cle + counter.to_bytes(4, 'big')).digest()
+        flux += h
+        counter += 1
+    return flux[:taille_message]
 
-
-# Générer un nonce (12 octets recommandés)
-def generer_nonce():
-    return secrets.token_bytes(12)
-
-
-# Chiffrer une chaîne de caractères
-def chiffre_message(cle, nonce, message):
-    message = message.encode()
-    chacha = ChaCha20Poly1305(cle)
-    ct = chacha.encrypt(nonce, message, None)
+# Chiffrer un message
+def chiffre_message(cle, message):
+    message_bytes = message.encode()
+    flux = flux_pseudo_aleatoire(cle, len(message_bytes))
+    ct = bytes([b ^ f for b, f in zip(message_bytes, flux)])
     return ct
 
-
 # Déchiffrer un message
-def dechiffre_message(cle, nonce, ct):
-    chacha = ChaCha20Poly1305(cle)
-    message = chacha.decrypt(nonce, ct, None)
-    return message.decode()
-
+def dechiffre_message(cle, ct):
+    flux = flux_pseudo_aleatoire(cle, len(ct))
+    message_bytes = bytes([b ^ f for b, f in zip(ct, flux)])
+    return message_bytes.decode()
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 2 and len(sys.argv) != 5:
-        print("Usage to encrypt with random key: <script> <msg>")
-        print("Usage to encrypt: <script> enc <msg> <key_hex> <nonce_hex>")
-        print("Usage to decrypt: <script> dec <cipher_hex> <key_hex> <nonce_hex>")
-        print("\nExemple :")
-        print("python ./MsgToCypher.py test")
-        print("python ./MsgToCypher.py enc test "
-              "9CEA372979FFDCBA028BD523A3F43A44B527DE31E2BBAE56F641D87D3F6C80BC "
-              "A977EA111934D65E8A6B5AC3")
-        print("python ./MsgToCypher.py dec "
-              "EFAADCF7EA0A786EF7B4EF7504605970 "
-              "9CEA372979FFDCBA028BD523A3F43A44B527DE31E2BBAE56F641D87D3F6C80BC "
-              "A977EA111934D65E8A6B5AC3")
+    if len(sys.argv) != 2 and len(sys.argv) != 3 and len(sys.argv) != 4:
+        print("Usage encrypt random key: <script> <msg>")
+        print("Usage encrypt with key: <script> enc <msg> <key_hex>")
+        print("Usage decrypt: <script> dec <cipher_hex> <key_hex>")
         sys.exit(0)
 
-    # Chiffrement avec clé et nonce aléatoires
+    # Chiffrement avec clé aléatoire
     if len(sys.argv) == 2:
-        m = sys.argv[1]
-        k = generer_cle()
-        n = generer_nonce()
-        c = chiffre_message(k, n, m)
-
-        print("key:", k.hex().upper())
-        print("nonce:", n.hex().upper())
-        print("cipherText:", c.hex().upper())
+        msg = sys.argv[1]
+        cle = generer_cle()
+        ct = chiffre_message(cle, msg)
+        print("key:", cle.hex().upper())
+        print("cipherText:", ct.hex().upper())
 
     # Mode explicite enc / dec
-    if len(sys.argv) == 5:
+    if len(sys.argv) == 4:
         if sys.argv[1] == 'enc':
-            m = sys.argv[2]
-            k = bytes.fromhex(sys.argv[3])
-            n = bytes.fromhex(sys.argv[4])
-            c = chiffre_message(k, n, m)
-
-            print("key:", k.hex().upper())
-            print("nonce:", n.hex().upper())
-            print("cipherText:", c.hex().upper())
+            msg = sys.argv[2]
+            cle = bytes.fromhex(sys.argv[3])
+            ct = chiffre_message(cle, msg)
+            print("key:", cle.hex().upper())
+            print("cipherText:", ct.hex().upper())
 
         if sys.argv[1] == 'dec':
-            c = bytes.fromhex(sys.argv[2])
-            k = bytes.fromhex(sys.argv[3])
-            n = bytes.fromhex(sys.argv[4])
-            m = dechiffre_message(k, n, c)
-
-            print("message:", m)
+            ct = bytes.fromhex(sys.argv[2])
+            cle = bytes.fromhex(sys.argv[3])
+            msg = dechiffre_message(cle, ct)
+            print("message:", msg)
